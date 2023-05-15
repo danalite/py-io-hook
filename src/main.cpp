@@ -1,21 +1,17 @@
-#include "pybind11/functional.h"
-#include "system.hpp"
-
-#include "uiohook.h"
 #include <pybind11/pybind11.h>
+
+#include <iostream>
+
+#include "pybind11/functional.h"
+#include "uiohook_worker.h"
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
+#define PYBIND11_DETAILED_ERROR_MESSAGES
 
-int add(int i, int j) { return i + j; }
 namespace py = pybind11;
 
-void System::start() {
-  int worker_status = uiohook_worker_start(func);
-  if (worker_status != UIOHOOK_SUCCESS) {
-    std::cout << "Failed to start worker thread" << std::endl;
-  }
-}
+int add(int i, int j) { return i + j; }
 
 PYBIND11_MODULE(pyiohook, m) {
   m.doc() = R"pbdoc(
@@ -39,13 +35,22 @@ PYBIND11_MODULE(pyiohook, m) {
         Some other explanation about the subtract function.
     )pbdoc");
 
-  py::class_<System>(m, "System")
-      .def(py::init<>())
-      .def("start", &System::start, py::call_guard<py::gil_scoped_release>())
-      .def("start_event_loop", &System::start_event_loop,
-           py::call_guard<py::gil_scoped_release>())
-      .def("stop", &System::stop, py::call_guard<py::gil_scoped_release>())
-      .def("register_callback", &System::register_callback);
+  m.def(
+      "start",
+      [](const std::function<void(int)> callback) {
+        dispatcher_t dispatcher = [](uiohook_event *const event) {
+          std::cout << "event->type: " << event->type << std::endl;
+          // callback(event->type);
+        };
+
+        int worker_status = uiohook_worker_start(dispatcher);
+        if (worker_status != UIOHOOK_SUCCESS) {
+          std::cout << "Failed to start worker thread" << std::endl;
+        }
+      },
+      R"pbdoc(
+        Start the event loop
+    )pbdoc");
 
 #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
